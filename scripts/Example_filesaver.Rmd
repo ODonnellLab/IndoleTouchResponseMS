@@ -1,0 +1,126 @@
+---
+title: "Example_filesaver"
+author: "MOD"
+date: "2023-03-20"
+output: 
+  html_document:
+    code_folding: hide
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+Figure_name <- "Example_fig"
+
+```
+
+Here is a basic script to load in a dataset, do some things with it, then save it and the edited dataset into a folder named by a variable. Note, by running in this project folder, you will be executing this script in the current working directory for this project (change this in preferences for Markdown in R), which will be:
+
+`r getwd()`
+
+The code below will load in a data file, which is currently located in the following folder: 
+
+`r file.path(dirname(here::here()),"datasets/")`
+
+Don't worry about the rest of the code because it's just data wrangling, the important part is the file path info: 
+
+```{r message = FALSE}
+### This part is important ####
+starved <- readxl::read_xlsx('datasets/cest-1.2_MOGL_levels_starvation.xlsx') %>%
+  select(1:5, contains("adult")) %>%
+  pivot_longer(cols = contains("adult"), names_to = 'stage', values_to = 'AUC') %>%
+  separate(stage, into = c("condition", "replicate"), sep = "adult...") %>%
+  mutate(condition = case_when(
+    condition == "starved" ~ "starved",
+    TRUE ~ "fed"
+  ))
+
+
+###  you can ignore this #####
+sumStarved <- starved %>% group_by(SMID, attachements, acylation1_2C, condition, cest_dep) %>%
+  summarize(AUC = mean(AUC)) %>%
+  pivot_wider(names_from = condition, values_from = AUC) %>%
+  mutate(avg = (starved + fed) / 2,
+         ratio = starved/fed)
+
+sumStarved <- sumStarved %>%
+  mutate(anomeric_carbon = factor(case_when(
+    str_detect(SMID, regex("iglu", ignore_case=TRUE)) ~ "indole",
+    str_detect(SMID, regex("tyglu", ignore_case=TRUE)) ~ "tyramine",
+    str_detect(SMID, regex("angl#", ignore_case=TRUE)) ~ "anthranilate",
+    str_detect(SMID, regex("bzglu", ignore_case=TRUE)) ~ "benzoic_acid",
+    str_detect(SMID, regex("pyglu", ignore_case=TRUE)) ~ "pyrrolic_acid",
+    str_detect(SMID, regex("mgglu", ignore_case=TRUE)) ~ "methyl_guanine",
+    str_detect(SMID, regex("nglu", ignore_case=TRUE)) ~ "nicotinic_acid",
+    str_detect(SMID, regex("oglu", ignore_case=TRUE)) ~ "octopamine",
+    str_detect(SMID, regex("higlu", ignore_case=TRUE)) ~ "hydroxyindole",
+    str_detect(SMID, regex("maglu", ignore_case=TRUE)) ~ "methyl_adenine",
+    str_detect(SMID, regex("pyglu", ignore_case=TRUE)) ~ "pyrrolic_acid"
+  )),
+  pathway = case_when(
+    acylation1_2C %in% c("tiglic_acid", 
+                         "pyrrolic_acid", 
+                         "isovaleric_acid",
+                         "propionic_acid",
+                         "nicotinic_acid") ~ "AminoAcidCatabolism",
+    TRUE ~ "other"
+  ))
+
+```
+
+
+I created an object called "sumStarved", it's a tibble. I will now make a plot with it. It's ugly for now but who cares. 
+
+```{r message = FALSE}
+plot <- sumStarved %>%
+  filter(avg > 0.001,
+         cest_dep == "cest-1.2",
+         !is.na(SMID),
+         !is.na(acylation1_2C),
+         !is.na(anomeric_carbon),
+         # anomeric_carbon %in% c("indole", 
+         #                        "tyramine", 
+         #                        "octopamine", 
+         #                        "anthranilate"),
+         !(SMID == "oglu#8" &
+             attachements == "octopamine pyrrolic acid (x2)")) %>%
+  mutate(anomeric_carbon = fct_relevel(anomeric_carbon, "indole")) %>%
+  ggplot(aes(x = fct_reorder(SMID, ratio), y = ratio)) +
+  geom_bar(stat="identity", aes(fill = fct_reorder(anomeric_carbon, ratio, mean, .desc = TRUE))) +
+                                                   # "indole", 
+                                                   # "tyramine",
+                                                   # "octopamine"))) +
+  scale_y_log10() +
+  scale_fill_viridis_d() +
+  #scale_fill_brewer(palette = "Set2") + 
+  guides(fill = guide_legend(title = "MOGL class")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+### diplay in the markdown so you can see it: ####
+plot
+```
+
+Now I'm going to use the relative paths in this directory to make a new folder with this example figure and example data in it, using the name of an object we entered in the header code chunk: 
+
+```{r saving}
+
+### make a folder
+fs::dir_create('../figures/',Figure_name)
+
+## save the plot
+ggsave(plot,
+       file = file.path('figures',
+                 Figure_name,
+                 paste0(Figure_name,'.png')))
+
+## save the formatted edited tibble:
+write_csv(sumStarved,
+          file = file.path('figures',
+                 Figure_name,
+                 paste0(Figure_name,'.csv')))
+
+```
+
+`r file.path('figures',Figure_name,paste0(Figure_name,'.png'))`
+
