@@ -45,7 +45,7 @@ plot <- dataframe %>%
                  geom = "bar", 
                  fun = "mean", 
                  width = 0.6,
-                 alpha = 0.85) +
+                 alpha = 0.7) +
     stat_summary(geom = "errorbar", 
                  fun.data = "mean_se", 
                  width = 0.1) +
@@ -56,7 +56,7 @@ plot <- dataframe %>%
                                "ugt-64" = "#35b676")) +
   labs(y = "Body Bends per Reversal (n)")+
   geom_signif(comparisons = list(c("N2", "cest-1.2"), c("N2", "cest-1.2p::cest-1.2")),
-              map_signif_level = TRUE, tip_length = 0.01, y_position = c(3, 3.5)) +
+              map_signif_level = TRUE, tip_length = 0.01, y_position = c(3.25, 3.5)) +
   theme(axis.text.x=element_text(size=12, angle = -40, face="italic"),
         axis.text.y=element_text(size=12), 
         axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12))

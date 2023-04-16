@@ -1,11 +1,10 @@
 ---
-title: "On vs Off Food Anterior Touch"
+title: "indole + vs tnaA bacteria touch responses"
 author: "Julia Balch"
-date: "2023-04-15"
+date: "2023-04-16"
 output: html_document
 ---
-Plot comparing reversals in response to anterior touch for worms on and off food
-
+Plot comparing anterior touch on indole vs tnaA bacteria
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -15,7 +14,7 @@ library(patchwork)
 library(ggsignif)
 theme_set(theme_classic())
 
-Figure_name <- "Figure2a"
+Figure_name <- "Figure2d"
 
 ```
 
@@ -24,13 +23,16 @@ Figure_name <- "Figure2a"
 
 csv_path <- "C:/Users/julia/OneDrive/Desktop/Projects/JBIndoleTouchResponseMS/datasets/TouchResponsesData.csv"
 
-TouchResponses <- read_csv(csv_path)
+TouchResponses <- read_csv(csv_path) %>%
+     mutate(date = as.Date(date, format = "%m/%d/%Y"))
 
 dataframe <-TouchResponses %>%
-  subset(food =='OP50' & is.na(additive) & time_off_food_min != "10" & 
-         genotype %in% c("N2", "cest-1.2"))
+  subset(food  %in% c('OP50', "OPtnaA", "K12 tnaA", "BW25113") & is.na(additive) & !time_off_food_min %in% c("10", "0", "30") 
+         & genotype %in% c("N2", "cest-1.2"))
 
-dataframe$genotype <- factor(dataframe$genotype, levels = c('N2','cest-1.2'),
+dataframe$genotype <- factor(dataframe$genotype, levels = c("N2", "cest-1.2"),
+                             ordered = TRUE)
+dataframe$food <- factor(dataframe$food, levels = c("OP50", "OPtnaA", "BW25113", "K12 tnaA"),
                              ordered = TRUE)
 
 ```
@@ -48,15 +50,15 @@ plot <- dataframe %>%
     stat_summary(geom = "errorbar", 
                  fun.data = "mean_se", 
                  width = 0.1) +
-  facet_grid(. ~ time_off_food_min) +
   scale_fill_manual(values = c("N2" = "#582878",
                                "cest-1.2" = "#26828e")) +
   labs(y = "Body Bends per Reversal (n)")+
   geom_signif(comparisons = list(c("N2", "cest-1.2")),
-              map_signif_level = TRUE, y_position = 3.5, tip_length = 0) +
-  theme(axis.text.x=element_text(size=12, face="italic"), 
+              map_signif_level = TRUE, tip_length = 0, y_position = 4) +
+  theme(axis.text.x=element_text(size=12, face="italic"),
         axis.text.y=element_text(size=12), 
-        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12))
+        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12)) +
+  facet_grid(. ~ food)
   
 plot
 ```
