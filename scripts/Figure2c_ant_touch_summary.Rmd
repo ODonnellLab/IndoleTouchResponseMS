@@ -59,7 +59,9 @@ plot <- dataframe %>%
               map_signif_level = TRUE, tip_length = 0.01, y_position = c(3.25, 3.5)) +
   theme(axis.text.x=element_text(size=12, angle = -40, face="italic"),
         axis.text.y=element_text(size=12), 
-        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12))
+        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12)) +
+  scale_y_continuous(expand = expansion(mult = c(0, .1)))
+
   
 plot
 ```

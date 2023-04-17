@@ -58,7 +58,8 @@ plot <- dataframe %>%
   theme(axis.text.x=element_text(size=12, face="italic"),
         axis.text.y=element_text(size=12), 
         axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12)) +
-  facet_grid(. ~ food)
+  facet_grid(. ~ food)  +
+  scale_y_continuous(expand = expansion(mult = c(0, .1)))
   
 plot
 ```
