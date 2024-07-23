@@ -11,6 +11,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+theme_set(theme_classic())
 Figure_name <- "Example_fig"
 
 ```

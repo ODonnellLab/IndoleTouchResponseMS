@@ -1,0 +1,54 @@
+---
+title: "Figure1C_FoodAntTouch"
+author: "MOD"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(patchwork)
+library(ODLabPlotTools)
+theme_set(theme_classic())
+Figure_name <- "Figure1B"
+```
+
+```{r load and filter data}
+# AntTouch <- read_csv('datasets/TouchResponsesData.csv') %>%
+AntTouch <- read_csv('../../ManuscriptVersions/cest1.2_anterior_touch_merged.csv') %>%
+  mutate(genotype = fct_relevel(genotype, "N2"))
+
+# Pull out dates for the ON/OFF food experiments:
+onFoodDates <-AntTouch %>% filter(time_off_food %in%  c(0,30,60)) %>%
+  select(date) %>%
+  unique()
+
+onFoodData <- AntTouch %>%
+  filter(date %in% onFoodDates$date,
+         genotype %in% c("N2", "cest-1.2"))
+
+```
+
+```{r}
+onFoodData %>%
+  #filter(time_off_food_min == 30) %>%
+  ggplot(aes(x = genotype, y = bends)) +
+  stat_summary(geom = "bar", fun = "mean", aes(fill = genotype)) +
+  facet_grid(.~time_off_food)
+
+onFoodData %>%
+  filter(genotype == "N2", time_off_food %in% c(0,30)) %>%
+  ggplot(aes(x = factor(time_off_food), y = bends)) +
+  stat_summary(geom = "bar", fun = "mean", width = 0.75, fill = "grey") +
+  stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.25, colour = "black") +
+  scale_y_continuous(expand = c(0,0))
+
+onFoodData %>%
+  filter(genotype == "N2", time_off_food %in% c(0,30)) %>%
+  lm(data = ., formula = bends ~ time_off_food) %>%
+  summary
+```
+
