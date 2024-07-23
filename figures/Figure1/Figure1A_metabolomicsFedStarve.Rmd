@@ -1,0 +1,257 @@
+---
+title: "Figure1A_metabolomicsFedStarve"
+author: "MOD"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(patchwork)
+theme_set(theme_classic())
+Figure_name <- "Figure1A"
+```
+
+
+```{r message = FALSE}
+### This part is important ####
+starved <- readxl::read_xlsx('datasets/cest-1.2_MOGL_levels_starvation.xlsx') %>%
+  select(1:6, contains("adult")) %>%
+  pivot_longer(cols = contains("adult"), names_to = 'stage', values_to = 'AUC') %>%
+  separate(stage, into = c("condition", "replicate"), sep = "adult...") %>%
+  mutate(condition = case_when(
+    condition == "starved" ~ "starved",
+    TRUE ~ "fed"
+  )) %>%
+  mutate(anomeric_carbon = factor(case_when(
+    str_detect(SMID, regex("^i\\glu", ignore_case=TRUE)) ~ "indole",
+    str_detect(SMID, regex("tyglu", ignore_case=TRUE)) ~ "tyramine",
+    str_detect(SMID, regex("angl#", ignore_case=TRUE)) ~ "anthranilate",
+    str_detect(SMID, regex("bzglu", ignore_case=TRUE)) ~ "benzoic_acid",
+    str_detect(SMID, regex("pyglu", ignore_case=TRUE)) ~ "pyrrolic_acid",
+    str_detect(SMID, regex("mgglu", ignore_case=TRUE)) ~ "methyl_guanine",
+    str_detect(SMID, regex("nglu", ignore_case=TRUE)) ~ "nicotinic_acid",
+    str_detect(SMID, regex("oglu", ignore_case=TRUE)) ~ "octopamine",
+    str_detect(SMID, regex("higlu", ignore_case=TRUE)) ~ "hydroxyindole",
+    str_detect(SMID, regex("maglu", ignore_case=TRUE)) ~ "methyl_adenine",
+    str_detect(SMID, regex("pyglu", ignore_case=TRUE)) ~ "pyrrolic_acid",
+    str_detect(SMID, regex("tiglu", ignore_case=TRUE)) ~ "tiglic_acid"
+  )),
+  pathway = case_when(
+    acylation1_2C %in% c("tiglic_acid", 
+                         "pyrrolic_acid", 
+                         "isovaleric_acid",
+                         "propionic_acid",
+                         "nicotinic_acid") ~ "AminoAcidCatabolism",
+    TRUE ~ "other"
+  ), 
+  nAcyl = case_when(
+    cest_dep == "cest-1.2" & acylation2_6C != "none" ~ 2,
+    cest_dep == "cest-1.2" & acylation1_2C != "none" & acylation2_6C == "none" ~ 1
+  ))
+
+### get an average, ratio and difference for each SMID in starved vs. fed #####
+sumStarved <- starved %>% group_by(SMID, attachements, acylation1_2C, condition, cest_dep, anomeric_carbon) %>%
+  summarize(AUC = mean(AUC)) %>%
+  pivot_wider(names_from = condition, values_from = AUC) %>%
+  mutate(avg = (starved + fed) / 2,
+         ratio = starved/fed,
+         diff = starved - fed)
+
+sumStarved <- sumStarved %>%
+  filter(anomeric_carbon %in% c("tyramine", "indole", "octopamine","nicotinic_acid", "benzoic_acid", "anthranilate")) %>%
+  mutate(anomeric_carbon = fct_relevel(anomeric_carbon, c("tyramine", "indole", "octopamine", "nicotinic_acid", "benzoic_acid","anthranilate")))
+
+#create a ranking for color schem based on the number of positive/negative ratios in the starved:fed averages. 
+
+CountPos <- sumStarved %>%
+      filter(
+        avg > 0.001,
+        #cest_dep == "cest-1.2",
+         !is.na(SMID),
+         !is.na(acylation1_2C),
+         !is.na(anomeric_carbon)) %>%
+  mutate(change = case_when(
+    ratio > 1 ~ "positive",
+    ratio < 1 ~ "negative"
+  )) %>%
+  group_by(anomeric_carbon, change) %>%
+  tally() %>%
+  pivot_wider(names_from = change, values_from = n) %>%
+  mutate(negOverPos = negative/positive) %>%
+  mutate(negOverPos = case_when(
+    is.na(negOverPos) ~ 1,
+    TRUE ~ negOverPos
+  )) %>%
+  filter(anomeric_carbon %in% c("tyramine", "indole", "octopamine","nicotinic_acid", "benzoic_acid", "anthranilate")) %>%
+  mutate(anomeric_carbon = fct_relevel(anomeric_carbon, c("tyramine", "indole", "octopamine", "nicotinic_acid", "benzoic_acid","anthranilate"))) %>%
+  pull(anomeric_carbon)
+
+#get a colormap using viridis palette and the number of MOGL class types
+# colors <- scales::viridis_pal(direction = -1)(6)
+colors <- RColorBrewer::brewer.pal(length(unique(levels(CountPos))), "Paired")
+#colors <- RColorBrewer::brewer.pal(6, "Set1")
+colors <- colors[c(3,4,7,8,9,10)]
+
+```
+
+
+I created an object called "sumStarved", it's a tibble. I will now make a plot with it.
+
+```{r message = FALSE}
+
+SMIDs_to_analyze <- sumStarved %>%
+  pull(SMID)
+
+SMID_data <- starved %>%
+  filter(SMID %in% SMIDs_to_analyze) %>%
+  full_join(., select(sumStarved, fed, avg, ratio)) %>%
+  mutate(relAUC = AUC / fed,
+         diffAUC = AUC - fed) %>%
+    filter(avg > 0.001,
+         cest_dep == "cest-1.2",
+         condition == "starved",
+         !is.na(SMID),
+         !is.na(acylation1_2C),
+         !is.na(anomeric_carbon),
+         !(SMID == "oglu#8" &
+             attachements == "octopamine pyrrolic acid (x2)")
+             ) %>%
+  mutate(SMID = fct_reorder(SMID, log(relAUC), .fun = mean, .desc = TRUE))
+
+plot_ratio <- SMID_data %>%
+  ggplot(aes(x = SMID, y = relAUC)) +
+  stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.7, aes(color = factor(nAcyl))) +
+  stat_summary(geom = "bar", fun = "mean", aes(fill = anomeric_carbon)) +
+  scale_y_log10() +
+  scale_fill_manual(values = colors, breaks = levels(CountPos)) +
+  scale_alpha_manual(values = c(0.75,1)) +
+  scale_color_manual(values = c("grey", "black")) +
+  guides(fill = guide_legend(title = "MOGL class \n (anomeric carbon)"),
+         color = guide_legend(title = "number of \n acyl groups")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "starved:fed ratio (AUC)")
+
+plot_diff <- SMID_data %>%
+  ggplot(aes(x = SMID, y = diffAUC)) +
+  stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.5, aes(color = factor(nAcyl))) +
+  stat_summary(geom = "bar", fun = "mean", aes(fill = anomeric_carbon)) +
+  #scale_y_log10() +
+  scale_fill_manual(values = colors, breaks = levels(CountPos)) +
+  scale_alpha_manual(values = c(0.75,1)) +
+  scale_color_manual(values = c("grey", "black")) +
+  guides(fill = guide_legend(title = "MOGL class")) +
+  theme(axis.text.x =  element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  guides(fill = "none",
+         color = "none") +
+  labs(y = "starved - fed (AUC)")
+
+inset_plot <- plot_ratio +
+  inset_element(plot_diff, left = 0.4, bottom = 0.6, right = 1, top = 1)
+
+inset_plot
+
+plot_nAcyl1 <- SMID_data %>%
+  mutate(relAUC = case_when(
+    nAcyl == 1 ~ relAUC,
+    TRUE ~ NA)) %>%
+  ggplot(aes(x = SMID, y = relAUC)) +
+  stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.5) +
+  stat_summary(geom = "bar", fun = "mean", aes(fill = anomeric_carbon)) +
+  #geom_bar(stat="identity", aes(fill = anomeric_carbon)) +
+  scale_y_log10() +
+  scale_fill_manual(values = colors, breaks = levels(CountPos)) +
+  guides(fill = guide_legend(title = "MOGL class")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+plot_nAcyl2 <- SMID_data %>%
+  mutate(relAUC = case_when(
+    nAcyl == 2 ~ relAUC,
+    TRUE ~ NA)) %>%
+  ggplot(aes(x = SMID, y = relAUC)) +
+  stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.5) +
+  stat_summary(geom = "bar", fun = "mean", aes(fill = anomeric_carbon)) +
+  #geom_bar(stat="identity", aes(fill = anomeric_carbon)) +
+  scale_y_log10() +
+  scale_fill_manual(values = colors, breaks = levels(CountPos)) +
+  guides(fill = guide_legend(title = "MOGL class")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    
+    SMID_data %>%
+  lm(formula = log(relAUC) ~ 0 + SMID ) %>%
+  emmeans::ref_grid() %>%
+  emmeans::contrast()
+  # )) %>%
+  # ggplot(aes(x = SMID, y = relAUC)) +
+  # stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.5) +
+  # stat_summary(geom = "bar", fun = "mean", aes(fill = anomeric_carbon)) +
+  # #geom_bar(stat="identity", aes(fill = anomeric_carbon)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = colors, breaks = levels(CountPos)) +
+  # guides(fill = guide_legend(title = "MOGL class")) +
+  # theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+Now I'm going to use the relative paths in this directory to make a new folder with this example figure and example data in it, using the name of an object we entered in the header code chunk: 
+
+
+```{r stats}
+
+# SMID_data <- starved %>%
+#   filter(SMID %in% SMIDs_to_analyze) %>%
+#   full_join(., select(sumStarved, fed))
+
+SMID_data %>%
+  mutate(SMID = fct_relevel(SMID, "tyglu#4")) %>%
+  lm(formula = log(relAUC) ~ SMID) %>%
+  emmeans::emmeans("SMID", adjust = "fdr")
+
+SMID_data %>%
+  lm(formula = diffAUC ~ 0 + SMID + SMID) %>%
+  emmeans::emmeans("SMID")
+
+# logistic regression on anomeric carbon either positive or negative based on starved:fed ratio
+SMID_data %>%
+  group_by(SMID, anomeric_carbon) %>%
+  summarize(meanRatio = mean(relAUC)) %>%
+  mutate(StarvedEffect = case_when(
+    meanRatio > 1 ~ "Pos",
+    meanRatio < 1 ~ "Neg"
+  )) %>%
+  group_by(anomeric_carbon, StarvedEffect) %>%
+  tally() %>%
+  pivot_wider(names_from = StarvedEffect, values_from = n) %>%
+  glm(formula = cbind(Neg, Pos) ~ 0 + anomeric_carbon, family = "binomial") %>%
+  summary()
+
+```
+
+```{r saving}
+
+### make a folder
+fs::dir_create('../figures/',Figure_name)
+
+## save the plot
+ggsave(inset_plot,
+       file = file.path('figures',
+                 Figure_name,
+                 paste0(Figure_name,'.pdf')),
+       width = 12,
+          height = 8)
+
+## save the formatted edited tibble:
+write_csv(sumStarved,
+          file = file.path('figures',
+                 Figure_name,
+                 paste0(Figure_name,'.csv')))
+
+```
+
+`r file.path('figures',Figure_name,paste0(Figure_name,'.png'))`
+

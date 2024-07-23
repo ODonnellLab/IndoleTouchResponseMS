@@ -1,0 +1,24 @@
+---
+author: "Change this"
+date: "`r Sys.Date()`"
+output: pdf_document
+params:
+    title: "Replace title (no spaces)"
+title: "`r params$title`
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(patchwork)
+theme_set(theme_classic())
+Figure_name <- params$title
+```
+
+## Figure template
+
+replace the coode in the following chunk with your analysis code. If you want to organize chunks, use cmd + shift + i to insert a new code chunk. 
+
+```{r template chunk}
+
+```
