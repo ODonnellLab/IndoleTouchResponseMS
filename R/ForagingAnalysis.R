@@ -197,7 +197,7 @@ if(ExtractTierpsyData) {
       worm_index,
       video_pref
     ) %>%
-    mutate(time_bin_min = ceiling(realTime / (time_bin * 60) + 0.01) * time_bin,  # make a time bin window (5min)
+    mutate(time_bin_min = ceiling(realTime / (time_bin * 60) ) * time_bin,  # make a time bin window (5min)
       #time_bin_min = ceiling(first(realTime) / (time_bin * 60) + 0.01) * time_bin,
       turn_init = replace_na(turn == 1 & turn != lag(turn), 0),
       rev_init = replace_na(motion_mode == -1 & motion_mode != lag(motion_mode), 0)) %>%
@@ -242,47 +242,145 @@ if(ExtractTierpsyData) {
          width = 11,
          height = 8.5)
 
-
-    # filter(turn == 1 & state_change == 1) %>%
-    # summarize(turns = sum(turn, na.rm = TRUE))
-  #
-  # track_durations <- extracted_tracks |>
-  #   select(
-  #     genotype,
-  #     strain,
-  #     worm_index,
-  #     video_pref,
-  #     timestamp,
-  #     relTime,
-  #     realTime
-  #   ) %>%
-  #   group_by(
-  #     genotype,
-  #     strain,
-  #     worm_index,
-  #     video_pref
-  #   ) %>%
-  #   mutate(time_bin_min = ceiling(first(realTime) / (time_bin * 60) + 0.01) * time_bin) %>% # make a time bin window (5min)
-  #   summarise(
-  #     duration_frames = last(timestamp) - first(timestamp),
-  #     duration_time = last(relTime) - first(relTime),
-  #     time_bin_min = first(time_bin_min)
-  #   )
-  #
-  # n_turns <- full_join(n_turns, track_durations) %>%
-  #   mutate(turns = case_when(
-  #     is.na(turns) ~ 0,
-  #     TRUE ~ turns
-  #   )) %>%
-  #   mutate(turn_freq_min = turns / (duration_time / 60))
-
-  ### save plot
   write_csv(n_turns,
-    file = file.path(
-      results_path,
-      paste0(basename(results_path), "_turn_data.csv")
-    )
+            file = file.path(
+              results_path,
+              paste0(basename(results_path), "_turn_data.csv")
+            )
   )
+
+  ### get track durations - mostly for a check for data validity
+
+  track_durations <- extracted_tracks |>
+    select(
+      genotype,
+      strain,
+      worm_index,
+      video_pref,
+      timestamp,
+      relTime,
+      realTime
+    ) %>%
+    group_by(
+      genotype,
+      strain,
+      worm_index,
+      video_pref
+    ) %>%
+    summarise(
+      duration_frames = last(timestamp) - first(timestamp),
+      duration_time = last(relTime) - first(relTime),
+      track_initiation_bin = ceiling( first(realTime) / (time_bin * 60) ) * time_bin,
+      time_bin_min = ceiling(
+        nth( realTime, ceiling( duration_frames/2) ) / (time_bin * 60)
+        ) * time_bin # midpoint of the track is duration_frames / 2 - take ceiling to make integer position
+    )
+
+
+  #### state durations and speed
+  state_durations <- extracted_tracks |>
+    select(
+      genotype,
+      strain,
+      worm_index,
+      speed,
+      video_pref,
+      timestamp,
+      relTime,
+      realTime,
+      motion_mode,
+      state_change,
+      state_change_tally
+    ) %>%
+    group_by(
+      genotype,
+      strain,
+      worm_index,
+      video_pref,
+      state_change_tally,
+      motion_mode
+    ) %>% summarise(
+      Tstart = first(realTime), # time in seconds
+      Tend = last(realTime),
+      duration_frames = n(),
+      time_bin_min = ceiling(
+        nth( realTime, ceiling( duration_frames/2) ) / (time_bin * 60)
+      ) * time_bin, # # midpoint of the track is duration_frames / 2 - take ceiling to make integer position
+      duration_time = last(realTime) - first(realTime),
+      state_speed = mean(speed, na.rm = TRUE)
+    ) %>%
+    filter(motion_mode %in% c(-1,0,1)) %>%
+    mutate( state_name =
+              case_when(
+                motion_mode == -1 ~ "reversal",
+                motion_mode == 0 ~ "pause",
+                motion_mode == 1 ~ "forward"
+              ) )
+
+  duration_plot <- state_durations %>%
+    ggplot(aes(x = time_bin_min, y = duration_time)) +
+    stat_summary(aes(color = strain)) +
+    facet_grid(state_name~., scales = "free_y") +
+    theme_grey() +
+    theme(panel.spacing = unit(1, "cm"))
+
+  ggsave(file.path(results_path, "State_durations.png"),
+         duration_plot,
+         width = 11,
+         height = 8.5)
+
+  speed_plot <- state_durations %>%
+    ggplot(aes(x = time_bin_min, y = state_speed)) +
+    stat_summary(aes(color = strain)) +
+    facet_grid(state_name~., scales = "free_y") +
+    theme_grey() +
+    theme(panel.spacing = unit(1, "cm"))
+
+  ggsave(file.path(results_path, "State_speeds.png"),
+         speed_plot,
+         width = 11,
+         height = 8.5)
+
+  write_csv(state_durations,
+            file = file.path(
+              results_path,
+              paste0(basename(results_path), "State_duration_data.csv")
+            )
+  )
+
+
+  #### reversal lengths
+
+  reversal_lengths <- extracted_tracks |>
+    filter(motion_mode == -1) |>
+    group_by(genotype, strain, worm_index, video_pref, state_change_tally) |>
+    # get total length of reversal
+    summarise(
+      duration_frames = n(),
+      time_bin_min = ceiling(
+        nth( realTime, ceiling( duration_frames/2) ) / (time_bin * 60)
+      ) * time_bin,
+      rev_length = sqrt(
+      (last(coord_x_head) - first(coord_x_head))^2 +
+        (last(coord_y_head) - first(coord_y_head))^2
+    ))
+
+ reversal_length_plot <- reversal_lengths %>%
+    ggplot(aes(x = time_bin_min, y = rev_length)) +
+    stat_summary(aes(color = strain)) +
+    theme_grey()
+
+ ggsave(file.path(results_path, "Reversal_lengths.png"),
+        reversal_length_plot,
+        width = 11,
+        height = 8.5)
+
+ write_csv(reversal_lengths,
+           file = file.path(
+             results_path,
+             paste0(basename(results_path), "Reversal_length_data.csv")
+           )
+ )
 
 
 
@@ -445,7 +543,7 @@ if(ExtractTierpsyData) {
 
     return(extracted_tracks)
   } else {
-    return(extracted_tracks)
+    #return(extracted_tracks)
   }
 
 }
