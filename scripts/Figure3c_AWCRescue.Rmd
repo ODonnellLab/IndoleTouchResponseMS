@@ -1,0 +1,85 @@
+---
+title: "Anterior touch response, gut vs AWC"
+author: "Julia Balch"
+date: "2023-04-16"
+output: html_document
+---
+plot of AWC rescue anterior touch data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(viridis)
+library(patchwork)
+library(ggsignif)
+theme_set(theme_classic())
+
+Figure_name <- "Figure3c"
+
+```
+
+
+```{r message = FALSE}
+
+csv_path <- "C:/Users/julia/OneDrive/Desktop/Projects/JBIndoleTouchResponseMS/datasets/TouchResponsesData.csv"
+
+TouchResponses <- read_csv(csv_path) %>%
+     mutate(date = as.Date(date, format = "%m/%d/%Y"))
+
+dataframe <-TouchResponses %>%
+  subset(food =='OP50' & is.na(additive) & !time_off_food_min %in% c("10", "0", "30") 
+         & genotype %in% c("N2", "cest-1.2", "cest-1.2p::cest-1.2","ges-1p::cest-1.2") 
+         & date > "2023-03-01" )
+
+dataframe$genotype <- factor(dataframe$genotype, levels = c("N2", "cest-1.2","ges-1p::cest-1.2", "cest-1.2p::cest-1.2"),
+                             ordered = TRUE)
+
+```
+
+
+```{r message = FALSE}
+plot <- dataframe %>%
+  
+    ggplot(aes(x = genotype, y = bends, fill = genotype)) +
+    stat_summary(aes(fill= genotype),
+                 geom = "bar", 
+                 fun = "mean", 
+                 width = 0.6,
+                 alpha = 0.7) +
+    stat_summary(geom = "errorbar", 
+                 fun.data = "mean_se", 
+                 width = 0.1) +
+  scale_fill_manual(values = c("N2" = "#707387",
+                               ##  "#582878",
+                               "cest-1.2" = "#26828e", 
+                               "cest-1.2p::cest-1.2" = "#3e4a89", 
+                               "ges-1p::cest-1.2" = "#31678e")) +
+  labs(y = "Body Bends per Reversal (n)")+
+  geom_signif(comparisons = list(c("N2", "cest-1.2"), c("N2", "ges-1p::cest-1.2"),
+                                 c("N2", "cest-1.2p::cest-1.2")),
+              map_signif_level = TRUE, tip_length = 0.015, y_position = c(3.25, 3.65, 4)) +
+  theme(axis.text.x=element_text(size=12, face="italic", angle = -30, color = "black"), 
+        axis.text.y=element_text(size=12, color = "black"), 
+        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size = 12)) +
+  scale_y_continuous(expand = expansion(mult = c(0, .1)))
+  
+plot
+```
+
+```{r saving}
+
+### make a folder
+new_folder <- fs::dir_create('../figures/',Figure_name)
+
+## save the plot
+ggsave(plot,
+       file = file.path(new_folder,
+                 Figure_name,
+                 paste0(Figure_name,'.png')))
+
+## save the formatted edited tibble:
+write_csv(dataframe,
+          file = file.path(new_folder,
+                 Figure_name,
+                 paste0(Figure_name,'.csv')))
+```
